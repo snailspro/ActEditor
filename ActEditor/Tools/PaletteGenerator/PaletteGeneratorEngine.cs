@@ -135,6 +135,301 @@ namespace ActEditor.Tools.PaletteGenerator {
 			return GeneratePalettes(basePalette, selectedIndices, mode, parameters, outputFolder, fileNamePrefix, numberOfVariations);
 		}
 
+		/// <summary>
+		/// Generates multiple palette files combining transformations from multiple color groups
+		/// </summary>
+		public List<string> GeneratePalettesWithGroups(
+			Pal basePalette,
+			List<ColorGroup> groups,
+			string outputFolder,
+			string fileNamePrefix,
+			string className = null,
+			string gender = null,
+			bool isCostume = false,
+			int costumeNumber = 0,
+			int skinColorType = 0
+		) {
+			if (basePalette == null) {
+				throw new ArgumentNullException("basePalette", "Base palette cannot be null");
+			}
+
+			if (groups == null || groups.Count == 0) {
+				throw new ArgumentException("At least one color group is required", "groups");
+			}
+
+			// Validate all groups
+			foreach (ColorGroup group in groups) {
+				if (!group.IsValid()) {
+					throw new ArgumentException(String.Format("Invalid color group: {0}", group.Name), "groups");
+				}
+			}
+
+			if (!Directory.Exists(outputFolder)) {
+				Directory.CreateDirectory(outputFolder);
+			}
+
+			List<string> generatedFiles = new List<string>();
+
+			// Calculate maximum number of variations across all groups
+			int maxVariations = groups.Max(g => g.NumberOfVariations);
+
+			// Generate palettes
+			for (int variationIndex = 0; variationIndex < maxVariations; variationIndex++) {
+				// Create a copy of the base palette
+				byte[] paletteData = new byte[1024];
+				Buffer.BlockCopy(basePalette.BytePalette, 0, paletteData, 0, 1024);
+				Pal newPalette = new Pal(paletteData);
+
+				// Apply transformations from each group first
+				foreach (ColorGroup group in groups) {
+					// Calculate which variation to use for this group
+					// If group has fewer variations, cycle through them
+					int groupVariationIndex = variationIndex % group.NumberOfVariations;
+
+					// Apply group transformation
+					ApplyGroupTransformation(newPalette, basePalette, group, groupVariationIndex);
+				}
+
+				// Apply skin color AFTER group transformations to ensure it's not overwritten
+				ApplySkinColor(newPalette, skinColorType);
+
+				// Copy modified palette data back to array before writing
+				Buffer.BlockCopy(newPalette.BytePalette, 0, paletteData, 0, 1024);
+
+				// Ensure transparency byte is 0
+				paletteData[3] = 0;
+
+				// Generate filename (start from 1, not 0)
+				string fileName = GenerateFileName(outputFolder, fileNamePrefix, variationIndex + 1, className, gender, isCostume, costumeNumber);
+				File.WriteAllBytes(fileName, paletteData);
+				generatedFiles.Add(fileName);
+			}
+
+			return generatedFiles;
+		}
+
+		/// <summary>
+		/// Applies skin color to indices 32-39
+		/// </summary>
+		private void ApplySkinColor(Pal palette, int skinColorType) {
+			// Skin color indices: 32-39 and 128-135
+			int[] skinIndices = { 32, 33, 34, 35, 36, 37, 38, 39, 128, 129, 130, 131, 132, 133, 134, 135 };
+			
+			if (skinColorType == 0) {
+				// Default skin colors (applied to both sets of indices) - using hex strings to ensure correct RGB order
+				GrfColor[] defaultColors = new GrfColor[] {
+					new GrfColor("#FFE99F91"), // #FFE99F91
+					new GrfColor("#FFFFE1CF"), // #FFFFE1CF
+					new GrfColor("#FFFFC6B2"), // #FFFFC6B2
+					new GrfColor("#FFF6AE9F"), // #FFF6AE9F
+					new GrfColor("#FFDC9084"), // #FFDC9084
+					new GrfColor("#FFBD736B"), // #FFBD736B
+					new GrfColor("#FF9E5652"), // #FF9E5652
+					new GrfColor("#FF823F3B")  // #FF823F3B
+				};
+				
+				// Apply colors to indices 32-39 (using SetColor which handles ARGB format correctly)
+				for (int i = 0; i < 8; i++) {
+					palette.SetColor(skinIndices[i], defaultColors[i]);
+				}
+				// Apply same colors to indices 128-135
+				for (int i = 0; i < 8; i++) {
+					palette.SetColor(skinIndices[i + 8], defaultColors[i]);
+				}
+			}
+			else if (skinColorType == 1) {
+				// Black skin colors (applied to both sets of indices) - using hex strings to ensure correct RGB order
+				GrfColor[] blackColors = new GrfColor[] {
+					new GrfColor("#FFDEB3A2"), // #FFDEB3A2
+					new GrfColor("#FFC39B8F"), // #FFC39B8F
+					new GrfColor("#FFAF867F"), // #FFAF867F
+					new GrfColor("#FF99726F"), // #FF99726F
+					new GrfColor("#FF835E5F"), // #FF835E5F
+					new GrfColor("#FF6D494F"), // #FF6D494F
+					new GrfColor("#FF543640"), // #FF543640
+					new GrfColor("#FF3B2331")  // #FF3B2331
+				};
+				
+				// Apply colors to indices 32-39 (using SetColor which handles ARGB format correctly)
+				for (int i = 0; i < 8; i++) {
+					palette.SetColor(skinIndices[i], blackColors[i]);
+				}
+				// Apply same colors to indices 128-135
+				for (int i = 0; i < 8; i++) {
+					palette.SetColor(skinIndices[i + 8], blackColors[i]);
+				}
+			}
+		}
+
+		/// <summary>
+		/// Applies a single group's transformation to a palette for a specific variation index
+		/// </summary>
+		private void ApplyGroupTransformation(Pal targetPalette, Pal sourcePalette, ColorGroup group, int variationIndex) {
+			if (group == null || !group.IsValid() || group.Indices == null || group.Indices.Count == 0) {
+				return;
+			}
+
+			// Exclude skin color indices (32-39 and 128-135) from group transformations
+			int[] skinIndices = { 32, 33, 34, 35, 36, 37, 38, 39, 128, 129, 130, 131, 132, 133, 134, 135 };
+			HashSet<int> skinIndicesSet = new HashSet<int>(skinIndices);
+			int[] indices = group.Indices.Where(idx => !skinIndicesSet.Contains(idx)).ToArray();
+
+			if (group.Mode == GenerationMode.HsvStandard) {
+				ApplyHsvStandardToIndices(targetPalette, sourcePalette, indices, group.Parameters, variationIndex, group.NumberOfVariations);
+			}
+			else if (group.Mode == GenerationMode.Colorize) {
+				ApplyColorizeToIndicesGroup(targetPalette, sourcePalette, indices, group.Parameters, variationIndex, group.NumberOfVariations);
+			}
+			else if (group.Mode == GenerationMode.Grayscale) {
+				ApplyGrayscaleToIndices(targetPalette, sourcePalette, indices, group.Parameters, variationIndex, group.NumberOfVariations);
+			}
+		}
+
+		/// <summary>
+		/// Applies HSV Standard transformation to specific indices for a variation
+		/// </summary>
+		private void ApplyHsvStandardToIndices(Pal targetPalette, Pal sourcePalette, int[] indices, GenerationParameters parameters, int variationIndex, int totalVariations) {
+			if (totalVariations <= 0) return;
+
+			double hueRange = parameters.HueMax - parameters.HueMin;
+			double satOffset = parameters.SaturationMin;
+			double ligOffset = parameters.LightnessMin;
+
+			// Calculate hue portion for each selected index
+			int numSelectedIndices = indices.Length;
+			double huePortionPerIndex = (numSelectedIndices > 0) ? hueRange / numSelectedIndices : 0;
+
+			// Calculate variation shift for this variation
+			double variationShift = (totalVariations > 1) ? (hueRange / totalVariations) * variationIndex : 0;
+
+			int indexPosition = 0;
+			foreach (int index in indices) {
+				if (index < 0 || index >= 256) continue;
+
+				GrfColor originalColor = sourcePalette.GetColor(index);
+				double originalHue = originalColor.Hue;
+				double originalSat = originalColor.Hsl.S;
+				double originalLig = originalColor.Lightness;
+
+				// Calculate hue offset for this index
+				double baseHueOffsetForIndex = huePortionPerIndex * indexPosition;
+				double combinedOffset = baseHueOffsetForIndex + variationShift;
+
+				// Wrap around the range if needed
+				while (combinedOffset >= hueRange) combinedOffset -= hueRange;
+				while (combinedOffset < 0) combinedOffset += hueRange;
+
+				double finalHueOffsetDegrees = combinedOffset + parameters.HueMin;
+				double hueOffsetNormalized = finalHueOffsetDegrees / 360.0;
+				double newHue = (originalHue + hueOffsetNormalized) % 1.0;
+				if (newHue < 0) newHue += 1.0;
+
+				// Apply saturation and lightness with smoother scaling (divide by 10 for finer control)
+				// Using multiplication: new = original * (1.0 + offset/10.0) for smoother control
+				double newSat = GrfColor.ClampDouble(originalSat * (1.0 + satOffset / 10.0));
+				double newLig = GrfColor.ClampDouble(originalLig * (1.0 + ligOffset / 10.0));
+
+				GrfColor newColor = GrfColor.FromHsl(newHue, newSat, newLig, originalColor.A);
+				targetPalette.SetBytes(index * 4, newColor.ToRgbaBytes());
+
+				indexPosition++;
+			}
+		}
+
+		/// <summary>
+		/// Applies Colorize transformation to specific indices for a variation
+		/// </summary>
+		private void ApplyColorizeToIndicesGroup(Pal targetPalette, Pal sourcePalette, int[] indices, GenerationParameters parameters, int variationIndex, int totalVariations) {
+			if (totalVariations <= 0) return;
+
+			// Classify colors into light, medium, and dark based on lightness
+			List<int> lightIndices = new List<int>();
+			List<int> mediumIndices = new List<int>();
+			List<int> darkIndices = new List<int>();
+
+			foreach (int index in indices) {
+				if (index < 0 || index >= 256) continue;
+
+				GrfColor color = sourcePalette.GetColor(index);
+				double lightness = color.Lightness;
+
+				if (lightness > 0.66) {
+					lightIndices.Add(index);
+				}
+				else if (lightness > 0.33) {
+					mediumIndices.Add(index);
+				}
+				else {
+					darkIndices.Add(index);
+				}
+			}
+
+			// Calculate hue range for variations
+			double hueRange = parameters.HueMax - parameters.HueMin;
+
+			// Calculate hue variation offset for this palette
+			double variationHueOffset = (totalVariations > 1) ? parameters.HueMin + (hueRange / totalVariations) * variationIndex : parameters.HueMin;
+
+			// Ensure offset stays within valid range (0-360)
+			while (variationHueOffset >= 360) variationHueOffset -= 360;
+			while (variationHueOffset < 0) variationHueOffset += 360;
+
+			// Use variationHueOffset as the primary base hue for this variation
+			double primaryHue = variationHueOffset;
+
+			// Apply relative offsets
+			double lightHueOffset = (primaryHue + parameters.ColorizeHueLight);
+			double mediumHueOffset = (primaryHue + parameters.ColorizeHueMedium);
+			double darkHueOffset = (primaryHue + parameters.ColorizeHueDark);
+
+			// Normalize to 0-360 range
+			lightHueOffset = ((lightHueOffset % 360) + 360) % 360;
+			mediumHueOffset = ((mediumHueOffset % 360) + 360) % 360;
+			darkHueOffset = ((darkHueOffset % 360) + 360) % 360;
+
+			// Apply colorize transformations with varied hue offsets
+			ApplyColorizeToIndices(targetPalette, sourcePalette, lightIndices, lightHueOffset, parameters.ColorizeSaturation, parameters.ColorizeBrightness);
+			ApplyColorizeToIndices(targetPalette, sourcePalette, mediumIndices, mediumHueOffset, parameters.ColorizeSaturation, parameters.ColorizeBrightness);
+			ApplyColorizeToIndices(targetPalette, sourcePalette, darkIndices, darkHueOffset, parameters.ColorizeSaturation, parameters.ColorizeBrightness);
+		}
+
+		/// <summary>
+		/// Applies Grayscale transformation to specific indices for a variation
+		/// </summary>
+		private void ApplyGrayscaleToIndices(Pal targetPalette, Pal sourcePalette, int[] indices, GenerationParameters parameters, int variationIndex, int totalVariations) {
+			if (totalVariations <= 0) return;
+
+			// Determine which tone to use based on variation index
+			// Cycle through light, medium, dark tones
+			double tone;
+			int toneIndex = variationIndex % 3;
+			if (toneIndex == 0) {
+				tone = parameters.GrayscaleLightTone;
+			}
+			else if (toneIndex == 1) {
+				tone = parameters.GrayscaleMediumTone;
+			}
+			else {
+				tone = parameters.GrayscaleDarkTone;
+			}
+
+			// Apply grayscale conversion to selected indices
+			foreach (int index in indices) {
+				if (index < 0 || index >= 256) continue;
+
+				GrfColor originalColor = sourcePalette.GetColor(index);
+				GrfColor grayscaleColor = ConvertToGrayscale(
+					originalColor,
+					tone,
+					parameters.GrayscaleType,
+					parameters.GrayscaleContrast,
+					parameters.GrayscaleBrightness
+				);
+
+				targetPalette.SetBytes(index * 4, grayscaleColor.ToRgbaBytes());
+			}
+		}
+
 		private List<string> GenerateHsvStandard(
 			Pal basePalette,
 			int[] selectedIndices,
@@ -332,24 +627,8 @@ namespace ActEditor.Tools.PaletteGenerator {
 				}
 			}
 
-			// #region agent log
-			try {
-				using (System.IO.StreamWriter logFile = System.IO.File.AppendText(@"c:\GitHub\ActEditor\.cursor\debug.log")) {
-					logFile.WriteLine(String.Format("{{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"A\",\"location\":\"GenerateColorize:282\",\"message\":\"Index classification\",\"data\":{{\"selectedCount\":{0},\"lightCount\":{1},\"mediumCount\":{2},\"darkCount\":{3}}},\"timestamp\":{4}}}", selectedIndices.Length, lightIndices.Count, mediumIndices.Count, darkIndices.Count, (DateTime.UtcNow - new DateTime(1970, 1, 1)).TotalMilliseconds));
-				}
-			} catch { }
-			// #endregion
-
 			// Calculate hue range for variations
 			double hueRange = parameters.HueMax - parameters.HueMin;
-
-			// #region agent log
-			try {
-				using (System.IO.StreamWriter logFile = System.IO.File.AppendText(@"c:\GitHub\ActEditor\.cursor\debug.log")) {
-					logFile.WriteLine(String.Format("{{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"B\",\"location\":\"GenerateColorize:285\",\"message\":\"Hue range calculation\",\"data\":{{\"hueMin\":{0},\"hueMax\":{1},\"hueRange\":{2}}},\"timestamp\":{3}}}", parameters.HueMin, parameters.HueMax, hueRange, (DateTime.UtcNow - new DateTime(1970, 1, 1)).TotalMilliseconds));
-				}
-			} catch { }
-			// #endregion
 
 			// Generate variations with hue range distribution
 			for (int i = 0; i < numberOfVariations; i++) {
@@ -359,27 +638,10 @@ namespace ActEditor.Tools.PaletteGenerator {
 				// For 360 variations with range 0-360, each gets 1 degree step
 				double variationHueOffset = (numberOfVariations > 1) ? parameters.HueMin + (hueRange / numberOfVariations) * i : parameters.HueMin;
 				
-				// #region agent log
-				try {
-					using (System.IO.StreamWriter logFile = System.IO.File.AppendText(@"c:\GitHub\ActEditor\.cursor\debug.log")) {
-						logFile.WriteLine(String.Format("{{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"F\",\"location\":\"GenerateColorize:310\",\"message\":\"Variation calculation\",\"data\":{{\"variation\":{0},\"hueMin\":{1},\"hueMax\":{2},\"hueRange\":{3},\"numberOfVariations\":{4},\"calculatedOffset\":{5}}},\"timestamp\":{6}}}", i, parameters.HueMin, parameters.HueMax, hueRange, numberOfVariations, variationHueOffset, (DateTime.UtcNow - new DateTime(1970, 1, 1)).TotalMilliseconds));
-					}
-				} catch { }
-				// #endregion
-				
 				// Ensure offset stays within valid range (0-360)
 				while (variationHueOffset >= 360) variationHueOffset -= 360;
 				while (variationHueOffset < 0) variationHueOffset += 360;
 				
-				// Apply the variation offset to each colorize hue parameter
-				// For Colorize mode variations, each palette should use a different hue across the full spectrum
-				// The variationHueOffset varies from 0 to 360, covering the entire hue circle
-				// We use this as the PRIMARY hue for this palette variation
-				// The ColorizeHueLight/Medium/Dark values are RELATIVE offsets to differentiate tones
-				
-				// Use variationHueOffset as the primary base hue for this variation
-				// Add small relative offsets for light/medium/dark to create subtle variations within the same palette
-				// This ensures each of the 360 palettes covers a different primary hue (0°, 1°, 2°... 359°)
 				double primaryHue = variationHueOffset;
 				
 				// Apply relative offsets: if base values are 0, all tones use the same hue
@@ -393,45 +655,16 @@ namespace ActEditor.Tools.PaletteGenerator {
 				mediumHueOffset = ((mediumHueOffset % 360) + 360) % 360;
 				darkHueOffset = ((darkHueOffset % 360) + 360) % 360;
 
-				// #region agent log
-				try {
-					using (System.IO.StreamWriter logFile = System.IO.File.AppendText(@"c:\GitHub\ActEditor\.cursor\debug.log")) {
-						logFile.WriteLine(String.Format("{{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"C\",\"location\":\"GenerateColorize:295\",\"message\":\"Variation offsets\",\"data\":{{\"variation\":{0},\"variationHueOffset\":{1},\"lightHueOffset\":{2},\"mediumHueOffset\":{3},\"darkHueOffset\":{4}}},\"timestamp\":{5}}}", i, variationHueOffset, lightHueOffset, mediumHueOffset, darkHueOffset, (DateTime.UtcNow - new DateTime(1970, 1, 1)).TotalMilliseconds));
-					}
-				} catch { }
-				// #endregion
-
 				// Create a copy of the base palette
 				byte[] paletteData = new byte[1024];
 				Buffer.BlockCopy(basePalette.BytePalette, 0, paletteData, 0, 1024);
 
 				Pal newPalette = new Pal(paletteData);
 
-				// #region agent log
-				byte[] beforeBytes = new byte[16];
-				Buffer.BlockCopy(paletteData, 0, beforeBytes, 0, 16);
-				// #endregion
-
 				// Apply colorize transformations with varied hue offsets
 				ApplyColorizeToIndices(newPalette, basePalette, lightIndices, lightHueOffset, parameters.ColorizeSaturation, parameters.ColorizeBrightness);
 				ApplyColorizeToIndices(newPalette, basePalette, mediumIndices, mediumHueOffset, parameters.ColorizeSaturation, parameters.ColorizeBrightness);
 				ApplyColorizeToIndices(newPalette, basePalette, darkIndices, darkHueOffset, parameters.ColorizeSaturation, parameters.ColorizeBrightness);
-
-				// #region agent log
-				byte[] afterPaletteBytes = new byte[16];
-				byte[] afterDataBytes = new byte[16];
-				Buffer.BlockCopy(newPalette.BytePalette, 0, afterPaletteBytes, 0, 16);
-				Buffer.BlockCopy(paletteData, 0, afterDataBytes, 0, 16);
-				bool dataMatches = true;
-				for (int j = 0; j < 1024 && dataMatches; j++) {
-					if (paletteData[j] != newPalette.BytePalette[j]) dataMatches = false;
-				}
-				try {
-					using (System.IO.StreamWriter logFile = System.IO.File.AppendText(@"c:\GitHub\ActEditor\.cursor\debug.log")) {
-						logFile.WriteLine(String.Format("{{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"D\",\"location\":\"GenerateColorize:308\",\"message\":\"After SetBytes comparison\",\"data\":{{\"variation\":{0},\"dataMatches\":{1},\"beforeFirst4Bytes\":\"{2}\",\"paletteFirst4Bytes\":\"{3}\",\"dataFirst4Bytes\":\"{4}\"}},\"timestamp\":{5}}}", i, dataMatches.ToString().ToLower(), BitConverter.ToString(beforeBytes), BitConverter.ToString(afterPaletteBytes), BitConverter.ToString(afterDataBytes), (DateTime.UtcNow - new DateTime(1970, 1, 1)).TotalMilliseconds));
-					}
-				} catch { }
-				// #endregion
 
 				// Copy modified palette data back to array before writing
 				Buffer.BlockCopy(newPalette.BytePalette, 0, paletteData, 0, 1024);
@@ -527,9 +760,6 @@ namespace ActEditor.Tools.PaletteGenerator {
 		}
 
 		private void ApplyColorizeToIndices(Pal targetPalette, Pal sourcePalette, List<int> indices, double hueOffset, double saturationOffset, double brightnessOffset) {
-			// #region agent log
-			int processedCount = 0;
-			// #endregion
 			foreach (int index in indices) {
 				if (index < 0 || index >= 256) continue;
 
@@ -547,43 +777,15 @@ namespace ActEditor.Tools.PaletteGenerator {
 				// Use target hue directly, preserving the lightness structure but changing color
 				// This is how Colorize works - it replaces the hue while maintaining the lightness pattern
 				double newHue = targetHue;
-				
-				// #region agent log
-				if (processedCount == 0 && indices.Count > 0) {
-					try {
-						using (System.IO.StreamWriter logFile = System.IO.File.AppendText(@"c:\GitHub\ActEditor\.cursor\debug.log")) {
-							logFile.WriteLine(String.Format("{{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H\",\"location\":\"ApplyColorizeToIndices:412\",\"message\":\"Colorize hue replacement\",\"data\":{{\"index\":{0},\"originalHue\":{1},\"targetHueDegrees\":{2},\"targetHueNormalized\":{3},\"newHue\":{4}}},\"timestamp\":{5}}}", index, originalHue, hueOffset, targetHue, newHue, (DateTime.UtcNow - new DateTime(1970, 1, 1)).TotalMilliseconds));
-						}
-					} catch { }
-				}
-				// #endregion
 
-				// Apply saturation and brightness offsets
-				// Keep original saturation/brightness structure, but apply offsets
-				double newSat = GrfColor.ClampDouble(originalSat + saturationOffset);
-				double newLig = GrfColor.ClampDouble(originalLig + brightnessOffset);
+				// Apply saturation and brightness with smoother scaling (divide by 10 for finer control)
+				// Using multiplication: new = original * (1.0 + offset/10.0) for smoother control
+				double newSat = GrfColor.ClampDouble(originalSat * (1.0 + saturationOffset / 10.0));
+				double newLig = GrfColor.ClampDouble(originalLig * (1.0 + brightnessOffset / 10.0));
 
 				GrfColor newColor = GrfColor.FromHsl(newHue, newSat, newLig, originalColor.A);
 				targetPalette.SetBytes(index * 4, newColor.ToRgbaBytes());
-				// #region agent log
-				processedCount++;
-				if (processedCount <= 3) {
-					byte[] rgba = newColor.ToRgbaBytes();
-					try {
-						using (System.IO.StreamWriter logFile = System.IO.File.AppendText(@"c:\GitHub\ActEditor\.cursor\debug.log")) {
-							logFile.WriteLine(String.Format("{{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"E\",\"location\":\"ApplyColorizeToIndices:340\",\"message\":\"Color transformation applied\",\"data\":{{\"index\":{0},\"originalHue\":{1},\"newHue\":{2},\"hueOffset\":{3},\"originalRgba\":[{4},{5},{6},{7}],\"newRgba\":[{8},{9},{10},{11}]}},\"timestamp\":{12}}}", index, originalHue, newHue, hueOffset, originalColor.R, originalColor.G, originalColor.B, originalColor.A, rgba[0], rgba[1], rgba[2], rgba[3], (DateTime.UtcNow - new DateTime(1970, 1, 1)).TotalMilliseconds));
-						}
-					} catch { }
-				}
-				// #endregion
 			}
-			// #region agent log
-			try {
-				using (System.IO.StreamWriter logFile = System.IO.File.AppendText(@"c:\GitHub\ActEditor\.cursor\debug.log")) {
-					logFile.WriteLine(String.Format("{{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"E\",\"location\":\"ApplyColorizeToIndices:end\",\"message\":\"Total processed\",\"data\":{{\"totalIndices\":{0},\"processedCount\":{1}}},\"timestamp\":{2}}}", indices.Count, processedCount, (DateTime.UtcNow - new DateTime(1970, 1, 1)).TotalMilliseconds));
-				}
-			} catch { }
-			// #endregion
 		}
 
 		public GrfColor ConvertToGrayscale(GrfColor originalColor, double tone, GrayscaleType grayscaleType, double contrast, double brightness) {
@@ -596,8 +798,9 @@ namespace ActEditor.Tools.PaletteGenerator {
 			// Apply contrast: (value - 0.5) * (1 + contrast) + 0.5
 			adjustedLuminance = (adjustedLuminance - 0.5) * (1.0 + contrast) + 0.5;
 
-			// Apply brightness
-			adjustedLuminance = adjustedLuminance + brightness;
+			// Apply brightness with smoother scaling (divide by 10 for finer control)
+			// Using addition but with scaled offset: new = value + brightness/10.0
+			adjustedLuminance = adjustedLuminance + brightness / 10.0;
 
 			// Clamp between 0.0 and 1.0
 			adjustedLuminance = GrfColor.ClampDouble(adjustedLuminance);

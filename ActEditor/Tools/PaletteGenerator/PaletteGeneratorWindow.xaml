@@ -7,13 +7,13 @@
                  xmlns:genericControls="clr-namespace:ActEditor.Core.WPF.GenericControls"
                  xmlns:PaletteGen="clr-namespace:ActEditor.Tools.PaletteGenerator"
                  Background="{StaticResource TabItemBackground}" Foreground="{StaticResource TextForeground}"
-                 Height="700" Width="1100" MinWidth="1000" MinHeight="600" Title="Palette Generator">
+                 Height="700" Width="1100" MinWidth="1000" MinHeight="600" Title="Gerador de Paleta">
     <Grid Focusable="True" Margin="10">
         <Grid.RowDefinitions>
             <RowDefinition Height="auto" />
             <RowDefinition Height="auto" />
             <RowDefinition Height="auto" />
-            <RowDefinition />
+            <RowDefinition Height="auto" />
             <RowDefinition Height="auto" />
         </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
@@ -24,66 +24,208 @@
         
         <!-- ACT Info -->
         <Grid Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3" Margin="0,0,0,10">
-            <Label Content="Source ACT:" Padding="0" Margin="0,0,10,0" VerticalAlignment="Center" />
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <Label Content="ACT de Origem:" Padding="0" Margin="0,0,10,0" VerticalAlignment="Center" />
             <TextBlock Name="_tbActInfo" Grid.Column="1" VerticalAlignment="Center" Foreground="{StaticResource TextForeground}" FontStyle="Italic" />
         </Grid>
 
-        <!-- Palette Index Selection -->
+        <!-- Color Groups Management -->
         <Grid Grid.Row="1" Grid.Column="0" Margin="0,0,0,10">
             <Grid.RowDefinitions>
                 <RowDefinition Height="auto" />
                 <RowDefinition Height="auto" />
+                <RowDefinition />
                 <RowDefinition Height="auto" />
             </Grid.RowDefinitions>
-            <Label Content="Palette Indices to Modify (0-255):" Padding="0" Margin="0,0,0,5" />
-            <Grid Grid.Row="1">
+            
+            <Label Content="Grupos de Cores:" Padding="0" Margin="0,0,0,5" />
+            
+            <!-- Group Management Buttons -->
+            <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,5">
+                <Button Name="_btnAddGroup" Content="Adicionar Grupo" Click="_btnAddGroup_Click" Padding="5,2" Margin="0,0,5,0" />
+                <Button Name="_btnRemoveGroup" Content="Remover" Click="_btnRemoveGroup_Click" Padding="5,2" Margin="0,0,5,0" />
+                <Button Name="_btnDuplicateGroup" Content="Duplicar" Click="_btnDuplicateGroup_Click" Padding="5,2" />
+            </StackPanel>
+            
+            <!-- Groups List with 2 columns -->
+            <ListBox Name="_lbGroups" Grid.Row="2" SelectionChanged="_lbGroups_SelectionChanged" Margin="0,0,0,5" SelectionMode="Single">
+                <ListBox.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <UniformGrid Columns="2" />
+                    </ItemsPanelTemplate>
+                </ListBox.ItemsPanel>
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <Border BorderBrush="{StaticResource UIThemeMainTabControlBorderBrush}" BorderThickness="1" Margin="2" Padding="5">
+                            <StackPanel Orientation="Vertical">
+                                <TextBlock FontWeight="Bold">
+                                    <TextBlock.Text>
+                                        <Binding Path="Name" />
+                                    </TextBlock.Text>
+                                </TextBlock>
+                                <TextBlock FontSize="10" Foreground="Gray">
+                                    <TextBlock.Text>
+                                        <Binding Path="ModeString" />
+                                    </TextBlock.Text>
+                                </TextBlock>
+                                <TextBlock FontSize="9" Foreground="DarkGray" TextWrapping="Wrap">
+                                    <TextBlock.Text>
+                                        <Binding Path="IndicesString" />
+                                    </TextBlock.Text>
+                                </TextBlock>
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+            
+            <!-- Selected Group Info -->
+            <Grid Grid.Row="3">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition />
-                    <ColumnDefinition Width="auto" />
-                </Grid.ColumnDefinitions>
-                <Grid Grid.Column="0" HorizontalAlignment="Left">
-                    <Border BorderBrush="{StaticResource UIThemeMainTabControlBorderBrush}" BorderThickness="1" Background="{StaticResource TabItemBackground}" Padding="5">
-                        <PaletteGen:PaletteSelectorGenerator x:Name="_paletteSelector" IsMultipleColorsSelectable="True" Width="256" Height="256" />
-                    </Border>
-                </Grid>
-                <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
-                    <Button Name="_btnSelectAll" Content="Select All" Click="_btnSelectAll_Click" Margin="0,0,0,5" Padding="5,2" />
-                    <Button Name="_btnSelectNone" Content="Select None" Click="_btnSelectNone_Click" Padding="5,2" />
-                </StackPanel>
-            </Grid>
-            <Grid Grid.Row="2" Margin="0,5,0,0">
-                <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="auto" />
                     <ColumnDefinition />
                 </Grid.ColumnDefinitions>
-                <Label Content="Selected:" Padding="0" Margin="0,0,10,0" VerticalAlignment="Center" />
-                <TextBlock Name="_tbSelectedIndices" Grid.Column="1" Padding="0" Foreground="{StaticResource TextForeground}" FontStyle="Italic" TextWrapping="Wrap" VerticalAlignment="Center" />
+                <Label Content="Índices do Grupo:" Padding="0" Margin="0,0,10,0" VerticalAlignment="Center" />
+                <TextBlock Name="_tbGroupIndices" Grid.Column="1" Padding="0" Foreground="{StaticResource TextForeground}" FontStyle="Italic" TextWrapping="Wrap" VerticalAlignment="Center" />
             </Grid>
         </Grid>
+        
+        <!-- Group Index Selection and Preview (combined in same module) -->
+        <GroupBox Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2" Header="Seleção de Índices e Visualização" Name="_gridGroupSelection" Visibility="Collapsed" Margin="0,0,0,10">
+            <Grid Margin="5">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="auto" />
+                    <RowDefinition Height="auto" />
+                    <RowDefinition Height="auto" />
+                    <RowDefinition Height="auto" />
+                    <RowDefinition Height="auto" />
+                    <RowDefinition Height="auto" />
+                </Grid.RowDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="10" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                
+                <Label Content="Selecione os Índices para o Grupo Atual (0-255):" Grid.Row="0" Grid.Column="0" Padding="0" Margin="0,0,0,5" />
+                <Grid Grid.Row="1" Grid.Column="0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition />
+                        <ColumnDefinition Width="auto" />
+                    </Grid.ColumnDefinitions>
+                    <Grid Grid.Column="0" HorizontalAlignment="Left">
+                        <Border BorderBrush="{StaticResource UIThemeMainTabControlBorderBrush}" BorderThickness="1" Background="{StaticResource TabItemBackground}" Padding="5">
+                            <PaletteGen:PaletteSelectorGenerator x:Name="_groupPaletteSelector" IsMultipleColorsSelectable="True" Width="256" Height="256" />
+                        </Border>
+                    </Grid>
+                    <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
+                        <Button Name="_btnGroupSelectAll" Content="Selecionar Todos" Click="_btnGroupSelectAll_Click" Margin="0,0,0,5" Padding="5,2" />
+                        <Button Name="_btnGroupSelectNone" Content="Deselecionar Todos" Click="_btnGroupSelectNone_Click" Padding="5,2" />
+                    </StackPanel>
+                </Grid>
+                <Grid Grid.Row="2" Grid.Column="0" Margin="0,5,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="auto" />
+                        <ColumnDefinition />
+                    </Grid.ColumnDefinitions>
+                    <Label Content="Selecionado:" Padding="0" Margin="0,0,10,0" VerticalAlignment="Center" />
+                    <TextBlock Name="_tbGroupSelectedIndices" Grid.Column="1" Padding="0" Foreground="{StaticResource TextForeground}" FontStyle="Italic" TextWrapping="Wrap" VerticalAlignment="Center" />
+                </Grid>
+                
+                <!-- Preview section -->
+                <Label Content="Visualização:" Grid.Row="0" Grid.Column="2" Padding="0" Margin="0,0,0,5" />
+                <Grid Grid.Row="1" Grid.Column="2" Grid.RowSpan="2">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="auto" />
+                        <RowDefinition Height="auto" />
+                        <RowDefinition Height="auto" />
+                        <RowDefinition Height="auto" />
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="auto" />
+                        <ColumnDefinition />
+                    </Grid.ColumnDefinitions>
+                    
+                    <Label Content="Ação:" Grid.Row="0" Grid.Column="0" Padding="0" Margin="0,0,10,5" VerticalAlignment="Center" />
+                    <ComboBox Name="_cbPreviewAction" Grid.Row="0" Grid.Column="1" Margin="0,0,0,5" SelectionChanged="_cbPreviewAction_SelectionChanged" />
+                    
+                    <Label Content="Quadro:" Grid.Row="1" Grid.Column="0" Padding="0" Margin="0,0,10,5" VerticalAlignment="Center" />
+                    <Grid Grid.Row="1" Grid.Column="1" Margin="0,0,0,5">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition />
+                            <ColumnDefinition Width="auto" />
+                        </Grid.ColumnDefinitions>
+                        <ComboBox Name="_cbPreviewFrame" Grid.Column="0" SelectionChanged="_cbPreviewFrame_SelectionChanged" />
+                        <Styles:FancyButton x:Name="_btnPlayPreview" Grid.Column="1" Height="20" Width="20" Margin="5,0,0,0" Click="_btnPlayPreview_Click" />
+                    </Grid>
+                    
+                    <Grid Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2" Margin="0,5,0,5">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition />
+                            <ColumnDefinition Width="10" />
+                            <ColumnDefinition />
+                        </Grid.ColumnDefinitions>
+                        <Button Name="_btnApplyPreview" Content="Aplicar" Grid.Column="0" Click="_btnApplyPreview_Click" Padding="10,5" HorizontalAlignment="Stretch" />
+                        <Button Name="_btnRandomPreview" Content="Aleatório" Grid.Column="2" Click="_btnRandomPreview_Click" Padding="10,5" HorizontalAlignment="Stretch" />
+                    </Grid>
+                    
+                    <Image Name="_imgPreview" Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2" Width="200" Height="200" Stretch="Uniform" HorizontalAlignment="Left" Margin="0,5,0,0" />
+                </Grid>
+            </Grid>
+        </GroupBox>
 
-        <!-- Mode Selection and Parameters -->
-        <Grid Grid.Row="1" Grid.Column="2" Margin="0,0,0,10">
+        <!-- Group Configuration -->
+        <Grid Grid.Row="2" Grid.Column="2" Margin="0,0,0,10" Name="_gridGroupConfig">
             <Grid.RowDefinitions>
+                <RowDefinition Height="auto" />
+                <RowDefinition Height="auto" />
                 <RowDefinition Height="auto" />
                 <RowDefinition Height="auto" />
             </Grid.RowDefinitions>
             
-            <!-- Mode Selection -->
+            <!-- Group Name -->
             <Grid Grid.Row="0" Margin="0,0,0,10">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="auto" />
                     <ColumnDefinition />
                 </Grid.ColumnDefinitions>
-                <Label Content="Mode:" Padding="0" Margin="0,0,10,0" VerticalAlignment="Center" />
+                <Label Content="Nome do Grupo:" Padding="0" Margin="0,0,10,0" VerticalAlignment="Center" />
+                <Border Grid.Column="1" BorderBrush="{StaticResource UIThemeMainTabControlBorderBrush}" BorderThickness="1">
+                    <genericControls:ClickSelectTextBox x:Name="_tbGroupName" BorderThickness="0" Padding="3,2" TextChanged="_tbGroupName_TextChanged" />
+                </Border>
+            </Grid>
+            
+            <!-- Number of Variations for this Group -->
+            <Grid Grid.Row="1" Margin="0,0,0,10">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="auto" />
+                    <ColumnDefinition />
+                </Grid.ColumnDefinitions>
+                <Label Content="Número de Variações:" Padding="0" Margin="0,0,10,0" VerticalAlignment="Center" />
+                <Border Grid.Column="1" BorderBrush="{StaticResource UIThemeMainTabControlBorderBrush}" BorderThickness="1">
+                    <genericControls:ClickSelectTextBox x:Name="_tbGroupNumberOfVariations" TextAlignment="Right" BorderThickness="0" Padding="3,2" TextChanged="_tbGroupNumberOfVariations_TextChanged" />
+                </Border>
+            </Grid>
+            
+            <!-- Mode Selection -->
+            <Grid Grid.Row="2" Margin="0,0,0,10">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="auto" />
+                    <ColumnDefinition />
+                </Grid.ColumnDefinitions>
+                <Label Content="Modo:" Padding="0" Margin="0,0,10,0" VerticalAlignment="Center" />
                 <StackPanel Grid.Column="1" Orientation="Horizontal">
-                    <RadioButton Name="_rbModeHsv" Content="HSV Standard" IsChecked="True" Margin="0,0,20,0" VerticalAlignment="Center" Checked="_rbMode_Checked" />
-                    <RadioButton Name="_rbModeColorize" Content="Colorize" Margin="0,0,20,0" VerticalAlignment="Center" Checked="_rbMode_Checked" />
-                    <RadioButton Name="_rbModeGrayscale" Content="Grayscale" VerticalAlignment="Center" Checked="_rbMode_Checked" />
+                    <RadioButton Name="_rbModeHsv" Content="HSV Padrão" IsChecked="True" Margin="0,0,20,0" VerticalAlignment="Center" Checked="_rbMode_Checked" />
+                    <RadioButton Name="_rbModeColorize" Content="Colorizar" Margin="0,0,20,0" VerticalAlignment="Center" Checked="_rbMode_Checked" />
+                    <RadioButton Name="_rbModeGrayscale" Content="Escala de Cinza" VerticalAlignment="Center" Checked="_rbMode_Checked" />
                 </StackPanel>
             </Grid>
 
             <!-- HSV Standard Mode Controls -->
-            <GroupBox Grid.Row="1" Header="HSV Standard Mode Parameters" Name="_gbHsvMode" Visibility="Visible">
+            <GroupBox Grid.Row="3" Header="Parâmetros do Modo HSV Padrão" Name="_gbHsvMode" Visibility="Visible">
                 <Grid Margin="5">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="auto" />
@@ -102,50 +244,50 @@
                 </Grid.ColumnDefinitions>
 
                 <!-- Hue -->
-                <Label Content="Hue:" Grid.Row="0" Grid.Column="0" Padding="0" Margin="0,0,10,5" VerticalAlignment="Center" />
-                <Label Content="Min:" Grid.Row="0" Grid.Column="1" Padding="0" Margin="0,0,5,5" VerticalAlignment="Center" />
+                <Label Content="Matiz:" Grid.Row="0" Grid.Column="0" Padding="0" Margin="0,0,10,5" VerticalAlignment="Center" />
+                <Label Content="Mín:" Grid.Row="0" Grid.Column="1" Padding="0" Margin="0,0,5,5" VerticalAlignment="Center" />
                 <Border Grid.Row="0" Grid.Column="2" BorderBrush="{StaticResource UIThemeMainTabControlBorderBrush}" BorderThickness="1" Margin="0,0,5,5">
                     <genericControls:ClickSelectTextBox x:Name="_tbHueMin" TextAlignment="Right" BorderThickness="0" Padding="3,2" />
                 </Border>
-                <Label Content="Max:" Grid.Row="0" Grid.Column="3" Padding="0" Margin="0,0,5,5" VerticalAlignment="Center" />
+                <Label Content="Máx:" Grid.Row="0" Grid.Column="3" Padding="0" Margin="0,0,5,5" VerticalAlignment="Center" />
                 <Border Grid.Row="0" Grid.Column="4" BorderBrush="{StaticResource UIThemeMainTabControlBorderBrush}" BorderThickness="1" Margin="0,0,0,5">
                     <genericControls:ClickSelectTextBox x:Name="_tbHueMax" TextAlignment="Right" BorderThickness="0" Padding="3,2" />
                 </Border>
-                <Label Content="Step:" Grid.Row="1" Grid.Column="1" Padding="0" Margin="0,0,5,5" VerticalAlignment="Center" />
+                <Label Content="Incremento:" Grid.Row="1" Grid.Column="1" Padding="0" Margin="0,0,5,5" VerticalAlignment="Center" />
                 <Border Grid.Row="1" Grid.Column="2" BorderBrush="{StaticResource UIThemeMainTabControlBorderBrush}" BorderThickness="1" Margin="0,0,5,5">
                     <genericControls:ClickSelectTextBox x:Name="_tbHueStep" TextAlignment="Right" BorderThickness="0" Padding="3,2" />
                 </Border>
-                <Label Content="Range:" Grid.Row="1" Grid.Column="3" Padding="0" Margin="0,0,5,5" VerticalAlignment="Center" />
+                <Label Content="Intervalo:" Grid.Row="1" Grid.Column="3" Padding="0" Margin="0,0,5,5" VerticalAlignment="Center" />
                 <Border Grid.Row="1" Grid.Column="4" BorderBrush="{StaticResource UIThemeMainTabControlBorderBrush}" BorderThickness="1" Margin="0,0,0,5">
                     <genericControls:ClickSelectTextBox x:Name="_tbHueRange" TextAlignment="Right" BorderThickness="0" Padding="3,2" />
                 </Border>
 
                 <!-- Saturation -->
-                <Label Content="Saturation:" Grid.Row="2" Grid.Column="0" Padding="0" Margin="0,0,10,0" VerticalAlignment="Center" />
-                <Label Content="Min:" Grid.Row="2" Grid.Column="1" Padding="0" Margin="0,0,5,0" VerticalAlignment="Center" />
+                <Label Content="Saturação:" Grid.Row="2" Grid.Column="0" Padding="0" Margin="0,0,10,0" VerticalAlignment="Center" />
+                <Label Content="Mín:" Grid.Row="2" Grid.Column="1" Padding="0" Margin="0,0,5,0" VerticalAlignment="Center" />
                 <Border Grid.Row="2" Grid.Column="2" BorderBrush="{StaticResource UIThemeMainTabControlBorderBrush}" BorderThickness="1" Margin="0,0,5,0">
                     <genericControls:ClickSelectTextBox x:Name="_tbSaturationMin" TextAlignment="Right" BorderThickness="0" Padding="3,2" />
                 </Border>
-                <Label Content="Max:" Grid.Row="2" Grid.Column="3" Padding="0" Margin="0,5,5,0" VerticalAlignment="Center" />
+                <Label Content="Máx:" Grid.Row="2" Grid.Column="3" Padding="0" Margin="0,5,5,0" VerticalAlignment="Center" />
                 <Border Grid.Row="2" Grid.Column="4" BorderBrush="{StaticResource UIThemeMainTabControlBorderBrush}" BorderThickness="1" Margin="0,0,0,0">
                     <genericControls:ClickSelectTextBox x:Name="_tbSaturationMax" TextAlignment="Right" BorderThickness="0" Padding="3,2" />
                 </Border>
-                <Label Content="Step:" Grid.Row="3" Grid.Column="1" Padding="0" Margin="0,0,5,0" VerticalAlignment="Center" />
+                <Label Content="Incremento:" Grid.Row="3" Grid.Column="1" Padding="0" Margin="0,0,5,0" VerticalAlignment="Center" />
                 <Border Grid.Row="3" Grid.Column="2" BorderBrush="{StaticResource UIThemeMainTabControlBorderBrush}" BorderThickness="1" Margin="0,0,5,0">
                     <genericControls:ClickSelectTextBox x:Name="_tbSaturationStep" TextAlignment="Right" BorderThickness="0" Padding="3,2" />
                 </Border>
 
                 <!-- Lightness -->
-                <Label Content="Lightness:" Grid.Row="4" Grid.Column="0" Padding="0" Margin="0,5,10,0" VerticalAlignment="Center" />
-                <Label Content="Min:" Grid.Row="4" Grid.Column="1" Padding="0" Margin="0,5,5,0" VerticalAlignment="Center" />
+                <Label Content="Luminosidade:" Grid.Row="4" Grid.Column="0" Padding="0" Margin="0,5,10,0" VerticalAlignment="Center" />
+                <Label Content="Mín:" Grid.Row="4" Grid.Column="1" Padding="0" Margin="0,5,5,0" VerticalAlignment="Center" />
                 <Border Grid.Row="4" Grid.Column="2" BorderBrush="{StaticResource UIThemeMainTabControlBorderBrush}" BorderThickness="1" Margin="0,5,5,0">
                     <genericControls:ClickSelectTextBox x:Name="_tbLightnessMin" TextAlignment="Right" BorderThickness="0" Padding="3,2" />
                 </Border>
-                <Label Content="Max:" Grid.Row="4" Grid.Column="3" Padding="0" Margin="0,5,5,0" VerticalAlignment="Center" />
+                <Label Content="Máx:" Grid.Row="4" Grid.Column="3" Padding="0" Margin="0,5,5,0" VerticalAlignment="Center" />
                 <Border Grid.Row="4" Grid.Column="4" BorderBrush="{StaticResource UIThemeMainTabControlBorderBrush}" BorderThickness="1" Margin="0,5,0,0">
                     <genericControls:ClickSelectTextBox x:Name="_tbLightnessMax" TextAlignment="Right" BorderThickness="0" Padding="3,2" />
                 </Border>
-                <Label Content="Step:" Grid.Row="5" Grid.Column="1" Padding="0" Margin="0,0,5,0" VerticalAlignment="Center" />
+                <Label Content="Incremento:" Grid.Row="5" Grid.Column="1" Padding="0" Margin="0,0,5,0" VerticalAlignment="Center" />
                 <Border Grid.Row="5" Grid.Column="2" BorderBrush="{StaticResource UIThemeMainTabControlBorderBrush}" BorderThickness="1" Margin="0,0,5,0">
                     <genericControls:ClickSelectTextBox x:Name="_tbLightnessStep" TextAlignment="Right" BorderThickness="0" Padding="3,2" />
                 </Border>
@@ -153,7 +295,7 @@
             </GroupBox>
 
             <!-- Colorize Mode Controls -->
-            <GroupBox Grid.Row="1" Header="Colorize Mode Parameters" Name="_gbColorizeMode" Visibility="Collapsed">
+            <GroupBox Grid.Row="3" Header="Parâmetros do Modo Colorizar" Name="_gbColorizeMode" Visibility="Collapsed">
                 <Grid Margin="5">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="auto" />
@@ -174,42 +316,42 @@
                     </Grid.ColumnDefinitions>
 
                     <!-- Hue Range for Variations -->
-                    <Label Content="Hue Range (for Variations):" Grid.Row="0" Grid.Column="0" Padding="0" Margin="0,0,10,5" VerticalAlignment="Center" />
-                    <Label Content="Min:" Grid.Row="0" Grid.Column="1" Padding="0" Margin="0,0,5,5" VerticalAlignment="Center" />
+                    <Label Content="Intervalo de Matiz (para Variações):" Grid.Row="0" Grid.Column="0" Padding="0" Margin="0,0,10,5" VerticalAlignment="Center" />
+                    <Label Content="Mín:" Grid.Row="0" Grid.Column="1" Padding="0" Margin="0,0,5,5" VerticalAlignment="Center" />
                     <Border Grid.Row="0" Grid.Column="2" BorderBrush="{StaticResource UIThemeMainTabControlBorderBrush}" BorderThickness="1" Margin="0,0,5,5">
                         <genericControls:ClickSelectTextBox x:Name="_tbColorizeHueMin" TextAlignment="Right" BorderThickness="0" Padding="3,2" />
                     </Border>
-                    <Label Content="Max:" Grid.Row="0" Grid.Column="3" Padding="0" Margin="0,0,5,5" VerticalAlignment="Center" />
+                    <Label Content="Máx:" Grid.Row="0" Grid.Column="3" Padding="0" Margin="0,0,5,5" VerticalAlignment="Center" />
                     <Border Grid.Row="0" Grid.Column="4" BorderBrush="{StaticResource UIThemeMainTabControlBorderBrush}" BorderThickness="1" Margin="0,0,0,5">
                         <genericControls:ClickSelectTextBox x:Name="_tbColorizeHueMax" TextAlignment="Right" BorderThickness="0" Padding="3,2" />
                     </Border>
-                    <Label Content="Range:" Grid.Row="1" Grid.Column="1" Padding="0" Margin="0,0,5,5" VerticalAlignment="Center" />
+                    <Label Content="Intervalo:" Grid.Row="1" Grid.Column="1" Padding="0" Margin="0,0,5,5" VerticalAlignment="Center" />
                     <Border Grid.Row="1" Grid.Column="2" Grid.ColumnSpan="3" BorderBrush="{StaticResource UIThemeMainTabControlBorderBrush}" BorderThickness="1" Margin="0,0,0,5">
                         <genericControls:ClickSelectTextBox x:Name="_tbColorizeHueRange" TextAlignment="Right" BorderThickness="0" Padding="3,2" />
                     </Border>
 
                     <!-- Colorize Hue Offsets -->
-                    <Label Content="Hue Offset (Light tones):" Grid.Row="2" Grid.Column="0" Padding="0" Margin="0,5,10,5" VerticalAlignment="Center" />
+                    <Label Content="Deslocamento de Matiz (Tons Claros):" Grid.Row="2" Grid.Column="0" Padding="0" Margin="0,5,10,5" VerticalAlignment="Center" />
                     <Border Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="4" BorderBrush="{StaticResource UIThemeMainTabControlBorderBrush}" BorderThickness="1" Margin="0,5,0,5">
                         <genericControls:ClickSelectTextBox x:Name="_tbColorizeHueLight" TextAlignment="Right" BorderThickness="0" Padding="3,2" />
                     </Border>
 
-                    <Label Content="Hue Offset (Medium tones):" Grid.Row="3" Grid.Column="0" Padding="0" Margin="0,0,10,5" VerticalAlignment="Center" />
+                    <Label Content="Deslocamento de Matiz (Tons Médios):" Grid.Row="3" Grid.Column="0" Padding="0" Margin="0,0,10,5" VerticalAlignment="Center" />
                     <Border Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="4" BorderBrush="{StaticResource UIThemeMainTabControlBorderBrush}" BorderThickness="1" Margin="0,0,0,5">
                         <genericControls:ClickSelectTextBox x:Name="_tbColorizeHueMedium" TextAlignment="Right" BorderThickness="0" Padding="3,2" />
                     </Border>
 
-                    <Label Content="Hue Offset (Dark tones):" Grid.Row="4" Grid.Column="0" Padding="0" Margin="0,0,10,5" VerticalAlignment="Center" />
+                    <Label Content="Deslocamento de Matiz (Tons Escuros):" Grid.Row="4" Grid.Column="0" Padding="0" Margin="0,0,10,5" VerticalAlignment="Center" />
                     <Border Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="4" BorderBrush="{StaticResource UIThemeMainTabControlBorderBrush}" BorderThickness="1" Margin="0,0,0,5">
                         <genericControls:ClickSelectTextBox x:Name="_tbColorizeHueDark" TextAlignment="Right" BorderThickness="0" Padding="3,2" />
                     </Border>
 
-                    <Label Content="Global Saturation Offset:" Grid.Row="5" Grid.Column="0" Padding="0" Margin="0,0,10,5" VerticalAlignment="Center" />
+                    <Label Content="Deslocamento Global de Saturação:" Grid.Row="5" Grid.Column="0" Padding="0" Margin="0,0,10,5" VerticalAlignment="Center" />
                     <Border Grid.Row="5" Grid.Column="1" Grid.ColumnSpan="4" BorderBrush="{StaticResource UIThemeMainTabControlBorderBrush}" BorderThickness="1" Margin="0,0,0,5">
                         <genericControls:ClickSelectTextBox x:Name="_tbColorizeSaturation" TextAlignment="Right" BorderThickness="0" Padding="3,2" />
                     </Border>
 
-                    <Label Content="Global Brightness Offset:" Grid.Row="6" Grid.Column="0" Padding="0" Margin="0,0,10,0" VerticalAlignment="Center" />
+                    <Label Content="Deslocamento Global de Brilho:" Grid.Row="6" Grid.Column="0" Padding="0" Margin="0,0,10,0" VerticalAlignment="Center" />
                     <Border Grid.Row="6" Grid.Column="1" Grid.ColumnSpan="4" BorderBrush="{StaticResource UIThemeMainTabControlBorderBrush}" BorderThickness="1">
                         <genericControls:ClickSelectTextBox x:Name="_tbColorizeBrightness" TextAlignment="Right" BorderThickness="0" Padding="3,2" />
                     </Border>
@@ -217,7 +359,7 @@
             </GroupBox>
 
             <!-- Grayscale Mode Controls -->
-            <GroupBox Grid.Row="1" Header="Grayscale Mode Parameters" Name="_gbGrayscaleMode" Visibility="Collapsed">
+            <GroupBox Grid.Row="3" Header="Parâmetros do Modo Escala de Cinza" Name="_gbGrayscaleMode" Visibility="Collapsed">
                 <Grid Margin="5">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="auto" />
@@ -237,11 +379,11 @@
                     </Grid.ColumnDefinitions>
 
                     <!-- Grayscale Type -->
-                    <Label Content="Grayscale Type:" Grid.Row="0" Grid.Column="0" Padding="0" Margin="0,0,10,10" VerticalAlignment="Center" />
+                    <Label Content="Tipo de Escala de Cinza:" Grid.Row="0" Grid.Column="0" Padding="0" Margin="0,0,10,10" VerticalAlignment="Center" />
                     <StackPanel Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="4" Orientation="Horizontal" Margin="0,0,0,10">
-                        <RadioButton Name="_rbGrayscaleTypeBlackWhite" Content="Black/White" IsChecked="True" Margin="0,0,20,0" VerticalAlignment="Center" />
-                        <RadioButton Name="_rbGrayscaleTypeGray" Content="Gray" Margin="0,0,20,0" VerticalAlignment="Center" />
-                        <RadioButton Name="_rbGrayscaleTypeBoth" Content="Both" VerticalAlignment="Center" />
+                        <RadioButton Name="_rbGrayscaleTypeBlackWhite" Content="Preto/Branco" IsChecked="True" Margin="0,0,20,0" VerticalAlignment="Center" />
+                        <RadioButton Name="_rbGrayscaleTypeGray" Content="Cinza" Margin="0,0,20,0" VerticalAlignment="Center" />
+                        <RadioButton Name="_rbGrayscaleTypeBoth" Content="Ambos" VerticalAlignment="Center" />
                     </StackPanel>
 
                     <!-- Light Tone -->
@@ -251,7 +393,7 @@
                     </Border>
 
                     <!-- Medium Tone -->
-                    <Label Content="Medium Tone:" Grid.Row="2" Grid.Column="0" Padding="0" Margin="0,0,10,5" VerticalAlignment="Center" />
+                    <Label Content="Tom Médio:" Grid.Row="2" Grid.Column="0" Padding="0" Margin="0,0,10,5" VerticalAlignment="Center" />
                     <Border Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="4" BorderBrush="{StaticResource UIThemeMainTabControlBorderBrush}" BorderThickness="1" Margin="0,0,0,5">
                         <genericControls:ClickSelectTextBox x:Name="_tbGrayscaleMediumTone" TextAlignment="Right" BorderThickness="0" Padding="3,2" />
                     </Border>
@@ -263,13 +405,13 @@
                     </Border>
 
                     <!-- Contrast -->
-                    <Label Content="Contrast:" Grid.Row="4" Grid.Column="0" Padding="0" Margin="0,0,10,5" VerticalAlignment="Center" />
+                    <Label Content="Contraste:" Grid.Row="4" Grid.Column="0" Padding="0" Margin="0,0,10,5" VerticalAlignment="Center" />
                     <Border Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="4" BorderBrush="{StaticResource UIThemeMainTabControlBorderBrush}" BorderThickness="1" Margin="0,0,0,5">
                         <genericControls:ClickSelectTextBox x:Name="_tbGrayscaleContrast" TextAlignment="Right" BorderThickness="0" Padding="3,2" />
                     </Border>
 
                     <!-- Brightness -->
-                    <Label Content="Brightness:" Grid.Row="5" Grid.Column="0" Padding="0" Margin="0,0,10,0" VerticalAlignment="Center" />
+                    <Label Content="Brilho:" Grid.Row="5" Grid.Column="0" Padding="0" Margin="0,0,10,0" VerticalAlignment="Center" />
                     <Border Grid.Row="5" Grid.Column="1" Grid.ColumnSpan="4" BorderBrush="{StaticResource UIThemeMainTabControlBorderBrush}" BorderThickness="1">
                         <genericControls:ClickSelectTextBox x:Name="_tbGrayscaleBrightness" TextAlignment="Right" BorderThickness="0" Padding="3,2" />
                     </Border>
@@ -277,16 +419,8 @@
             </GroupBox>
         </Grid>
 
-        <!-- Output Settings and Preview -->
-        <Grid Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="3" Margin="0,0,0,10">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="10" />
-                <ColumnDefinition Width="*" />
-            </Grid.ColumnDefinitions>
-            
-            <!-- Output Settings -->
-            <GroupBox Grid.Column="0" Header="Output Settings">
+        <!-- Output Settings -->
+        <GroupBox Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="3" Header="Output Settings" Margin="0,0,0,10">
             <Grid Margin="5">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="auto" />
@@ -303,16 +437,16 @@
                     <ColumnDefinition />
                 </Grid.ColumnDefinitions>
 
-                <Label Content="Output Folder:" Grid.Row="0" Grid.Column="0" Padding="0" Margin="0,0,10,10" VerticalAlignment="Center" />
+                <Label Content="Pasta de Saída:" Grid.Row="0" Grid.Column="0" Padding="0" Margin="0,0,10,10" VerticalAlignment="Center" />
                 <Styles:PathBrowser Grid.Row="0" Grid.Column="1" x:Name="_pbOutputFolder" BrowseMode="Folder" MinWidth="300" UseSavePath="True" SavePathUniqueName="PaletteGenerator - Output - " />
 
                 <Label Content="Class:" Grid.Row="1" Grid.Column="0" Padding="0" Margin="0,0,10,10" VerticalAlignment="Center" />
                 <ComboBox Grid.Row="1" Grid.Column="1" x:Name="_cbClass" MinWidth="300" Margin="0,0,0,10" DisplayMemberPath="DisplayName" SelectedValuePath="Code" />
 
-                <Label Content="Gender:" Grid.Row="2" Grid.Column="0" Padding="0" Margin="0,0,10,10" VerticalAlignment="Center" />
+                <Label Content="Gênero:" Grid.Row="2" Grid.Column="0" Padding="0" Margin="0,0,10,10" VerticalAlignment="Center" />
                 <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" Margin="0,0,0,10">
-                    <RadioButton Name="_rbGenderMale" Content="Male (³²)" IsChecked="True" Margin="0,0,20,0" VerticalAlignment="Center" />
-                    <RadioButton Name="_rbGenderFemale" Content="Female (¿©)" VerticalAlignment="Center" />
+                    <RadioButton Name="_rbGenderMale" Content="Masculino (³²)" IsChecked="True" Margin="0,0,20,0" VerticalAlignment="Center" />
+                    <RadioButton Name="_rbGenderFemale" Content="Feminino (¿©)" VerticalAlignment="Center" />
                 </StackPanel>
 
                 <Label Content="Sprite Type:" Grid.Row="3" Grid.Column="0" Padding="0" Margin="0,0,10,10" VerticalAlignment="Center" />
@@ -321,50 +455,28 @@
                     <RadioButton Name="_rbSpriteTypeCostume" Content="Costume" VerticalAlignment="Center" Checked="_rbSpriteType_Checked" />
                 </StackPanel>
 
-                <Label Content="Costume Number:" Grid.Row="4" Grid.Column="0" Padding="0" Margin="0,0,10,10" VerticalAlignment="Center" />
+                <Label Content="Número da Fantasia:" Grid.Row="4" Grid.Column="0" Padding="0" Margin="0,0,10,10" VerticalAlignment="Center" />
                 <Border Grid.Row="4" Grid.Column="1" BorderBrush="{StaticResource UIThemeMainTabControlBorderBrush}" BorderThickness="1" Margin="0,0,0,10">
                     <genericControls:ClickSelectTextBox x:Name="_tbCostumeNumber" TextAlignment="Right" BorderThickness="0" Padding="3,2" IsEnabled="False" />
                 </Border>
 
-                <Label Content="File Name Prefix:" Grid.Row="5" Grid.Column="0" Padding="0" Margin="0,0,10,10" VerticalAlignment="Center" />
+                <Label Content="Prefixo do Nome do Arquivo:" Grid.Row="5" Grid.Column="0" Padding="0" Margin="0,0,10,10" VerticalAlignment="Center" />
                 <Border Grid.Row="5" Grid.Column="1" BorderBrush="{StaticResource UIThemeMainTabControlBorderBrush}" BorderThickness="1" Margin="0,0,0,10">
                     <genericControls:ClickSelectTextBox x:Name="_tbFileNamePrefix" BorderThickness="0" Padding="3,2" />
                 </Border>
 
-                <Label Content="Number of Variations:" Grid.Row="6" Grid.Column="0" Padding="0" Margin="0,0,10,0" VerticalAlignment="Center" />
-                <Border Grid.Row="6" Grid.Column="1" BorderBrush="{StaticResource UIThemeMainTabControlBorderBrush}" BorderThickness="1">
+                <Label Content="Número de Variações:" Grid.Row="6" Grid.Column="0" Padding="0" Margin="0,0,10,10" VerticalAlignment="Center" />
+                <Border Grid.Row="6" Grid.Column="1" BorderBrush="{StaticResource UIThemeMainTabControlBorderBrush}" BorderThickness="1" Margin="0,0,0,10">
                     <genericControls:ClickSelectTextBox x:Name="_tbNumberOfVariations" TextAlignment="Right" BorderThickness="0" Padding="3,2" />
                 </Border>
+
+                <Label Content="Cor de Pele:" Grid.Row="7" Grid.Column="0" Padding="0" Margin="0,0,10,0" VerticalAlignment="Center" />
+                <ComboBox Grid.Row="7" Grid.Column="1" x:Name="_cbSkinColor" SelectionChanged="_cbSkinColor_SelectionChanged" Margin="0,0,0,0">
+                    <ComboBoxItem Content="Pele Clara" IsSelected="True" />
+                    <ComboBoxItem Content="Pele Negra" />
+                </ComboBox>
             </Grid>
-            </GroupBox>
-
-            <!-- Preview -->
-            <GroupBox Grid.Column="2" Header="Preview">
-            <Grid Margin="5">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="auto" />
-                    <RowDefinition Height="auto" />
-                    <RowDefinition Height="auto" />
-                    <RowDefinition Height="auto" />
-                    <RowDefinition Height="auto" />
-                </Grid.RowDefinitions>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="auto" />
-                    <ColumnDefinition />
-                </Grid.ColumnDefinitions>
-
-                <Label Content="Action:" Grid.Row="0" Grid.Column="0" Padding="0" Margin="0,0,10,5" VerticalAlignment="Center" />
-                <ComboBox Name="_cbPreviewAction" Grid.Row="0" Grid.Column="1" Margin="0,0,0,5" SelectionChanged="_cbPreviewAction_SelectionChanged" />
-
-                <Label Content="Frame:" Grid.Row="1" Grid.Column="0" Padding="0" Margin="0,0,10,5" VerticalAlignment="Center" />
-                <ComboBox Name="_cbPreviewFrame" Grid.Row="1" Grid.Column="1" Margin="0,0,0,5" SelectionChanged="_cbPreviewFrame_SelectionChanged" />
-
-                <Button Name="_btnApplyPreview" Content="Apply" Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2" Click="_btnApplyPreview_Click" Margin="0,5,0,5" Padding="10,5" HorizontalAlignment="Stretch" />
-
-                <Image Name="_imgPreview" Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2" Width="200" Height="200" Stretch="Uniform" HorizontalAlignment="Left" Margin="0,5,0,0" />
-            </Grid>
-            </GroupBox>
-        </Grid>
+        </GroupBox>
 
         <!-- Buttons -->
         <Grid Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="3" Margin="0,10,0,0">
@@ -374,8 +486,8 @@
             </Grid.ColumnDefinitions>
             <TextBlock Name="_tbStatus" Grid.Column="0" VerticalAlignment="Center" Foreground="{StaticResource TextForeground}" />
             <StackPanel Grid.Column="1" Orientation="Horizontal">
-                <Button Name="_btnGenerate" Content="Generate" Click="_btnGenerate_Click" MinWidth="100" Height="30" Margin="0,0,10,0" Padding="10,5" />
-                <Button Name="_btnCancel" Content="Close" Click="_btnCancel_Click" MinWidth="100" Height="30" Padding="10,5" />
+                <Button Name="_btnGenerate" Content="Gerar" Click="_btnGenerate_Click" MinWidth="100" Height="30" Margin="0,0,10,0" Padding="10,5" />
+                <Button Name="_btnCancel" Content="Fechar" Click="_btnCancel_Click" MinWidth="100" Height="30" Padding="10,5" />
             </StackPanel>
         </Grid>
     </Grid>

@@ -263,6 +263,7 @@
     </Compile>
     <Compile Include="Tools\PaletteSheetGenerator\SpriteResource.cs" />
     <Compile Include="Tools\PaletteSheetGenerator\SpsManager.cs" />
+    <Compile Include="Tools\PaletteGenerator\ColorGroup.cs" />
     <Compile Include="Tools\PaletteGenerator\PaletteGeneratorConfig.cs" />
     <Compile Include="Tools\PaletteGenerator\PaletteGeneratorEngine.cs" />
     <Compile Include="Tools\PaletteGenerator\RagnarokClasses.cs" />

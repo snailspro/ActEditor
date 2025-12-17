@@ -143,6 +143,12 @@ namespace ActEditor.Tools.PaletteGenerator {
 			set { ConfigAsker["[PaletteGenerator - Last costume number]"] = value.ToString(CultureInfo.InvariantCulture); }
 		}
 
+		// Skin color configuration
+		public static int LastSkinColorType {
+			get { return Int32.Parse(ConfigAsker["[PaletteGenerator - Last skin color type]", "0"]); }
+			set { ConfigAsker["[PaletteGenerator - Last skin color type]"] = value.ToString(CultureInfo.InvariantCulture); }
+		}
+
 		// Grayscale Mode parameters
 		public static int LastGrayscaleType {
 			get { return Int32.Parse(ConfigAsker["[PaletteGenerator - Grayscale - Type]", "1"]); }
@@ -194,6 +200,184 @@ namespace ActEditor.Tools.PaletteGenerator {
 			}
 
 			LastSelectedIndices = String.Join(",", indices.Select(i => i.ToString(CultureInfo.InvariantCulture)).ToArray());
+		}
+
+		/// <summary>
+		/// Saves a list of color groups to configuration
+		/// </summary>
+		public static void SaveColorGroups(List<ColorGroup> groups) {
+			if (groups == null || groups.Count == 0) {
+				ConfigAsker["[PaletteGenerator - Color Groups Count]"] = "0";
+				ConfigAsker["[PaletteGenerator - Color Groups Data]"] = "";
+				return;
+			}
+
+			ConfigAsker["[PaletteGenerator - Color Groups Count]"] = groups.Count.ToString(CultureInfo.InvariantCulture);
+
+			// Serialize groups to a simple format: group1|group2|...
+			// Each group: name;mode;variations;indices;params
+			// Params: hsv:hueMin,hueMax,...|colorize:hueLight,...|grayscale:type,lightTone,...
+			List<string> groupStrings = new List<string>();
+
+			foreach (ColorGroup group in groups) {
+				List<string> parts = new List<string>();
+				
+				// Name (escape | and ;)
+				parts.Add((group.Name ?? "").Replace("|", "||").Replace(";", ";;"));
+				
+				// Mode
+				parts.Add(((int)group.Mode).ToString(CultureInfo.InvariantCulture));
+				
+				// Variations
+				parts.Add(group.NumberOfVariations.ToString(CultureInfo.InvariantCulture));
+				
+				// Indices
+				string indicesStr = String.Join(",", group.Indices.Select(i => i.ToString(CultureInfo.InvariantCulture)).ToArray());
+				parts.Add(indicesStr);
+				
+				// Parameters
+				List<string> paramParts = new List<string>();
+				paramParts.Add(String.Format("hsv:{0},{1},{2},{3},{4},{5},{6},{7},{8}",
+					group.Parameters.HueMin.ToString(CultureInfo.InvariantCulture),
+					group.Parameters.HueMax.ToString(CultureInfo.InvariantCulture),
+					group.Parameters.HueStep.ToString(CultureInfo.InvariantCulture),
+					group.Parameters.SaturationMin.ToString(CultureInfo.InvariantCulture),
+					group.Parameters.SaturationMax.ToString(CultureInfo.InvariantCulture),
+					group.Parameters.SaturationStep.ToString(CultureInfo.InvariantCulture),
+					group.Parameters.LightnessMin.ToString(CultureInfo.InvariantCulture),
+					group.Parameters.LightnessMax.ToString(CultureInfo.InvariantCulture),
+					group.Parameters.LightnessStep.ToString(CultureInfo.InvariantCulture)
+				));
+				paramParts.Add(String.Format("colorize:{0},{1},{2},{3},{4}",
+					group.Parameters.ColorizeHueLight.ToString(CultureInfo.InvariantCulture),
+					group.Parameters.ColorizeHueMedium.ToString(CultureInfo.InvariantCulture),
+					group.Parameters.ColorizeHueDark.ToString(CultureInfo.InvariantCulture),
+					group.Parameters.ColorizeSaturation.ToString(CultureInfo.InvariantCulture),
+					group.Parameters.ColorizeBrightness.ToString(CultureInfo.InvariantCulture)
+				));
+				paramParts.Add(String.Format("grayscale:{0},{1},{2},{3},{4},{5}",
+					((int)group.Parameters.GrayscaleType).ToString(CultureInfo.InvariantCulture),
+					group.Parameters.GrayscaleLightTone.ToString(CultureInfo.InvariantCulture),
+					group.Parameters.GrayscaleMediumTone.ToString(CultureInfo.InvariantCulture),
+					group.Parameters.GrayscaleDarkTone.ToString(CultureInfo.InvariantCulture),
+					group.Parameters.GrayscaleContrast.ToString(CultureInfo.InvariantCulture),
+					group.Parameters.GrayscaleBrightness.ToString(CultureInfo.InvariantCulture)
+				));
+				
+				parts.Add(String.Join("|", paramParts.ToArray()));
+				
+				groupStrings.Add(String.Join(";", parts.ToArray()));
+			}
+
+			ConfigAsker["[PaletteGenerator - Color Groups Data]"] = String.Join("||", groupStrings.ToArray());
+		}
+
+		/// <summary>
+		/// Loads a list of color groups from configuration
+		/// </summary>
+		public static List<ColorGroup> LoadColorGroups() {
+			List<ColorGroup> groups = new List<ColorGroup>();
+
+			try {
+				int count = Int32.Parse(ConfigAsker["[PaletteGenerator - Color Groups Count]", "0"]);
+				if (count <= 0) {
+					return groups;
+				}
+
+				string data = ConfigAsker["[PaletteGenerator - Color Groups Data]", ""];
+				if (String.IsNullOrEmpty(data)) {
+					return groups;
+				}
+
+				string[] groupStrings = data.Split(new string[] { "||" }, StringSplitOptions.None);
+				
+				foreach (string groupStr in groupStrings) {
+					if (String.IsNullOrEmpty(groupStr))
+						continue;
+
+					string[] parts = groupStr.Split(';');
+					if (parts.Length < 5)
+						continue;
+
+					try {
+						ColorGroup group = new ColorGroup();
+						
+						// Name
+						group.Name = parts[0].Replace(";;", ";").Replace("||", "|");
+						
+						// Mode
+						group.Mode = (PaletteGeneratorEngine.GenerationMode)Int32.Parse(parts[1]);
+						
+						// Variations
+						group.NumberOfVariations = Int32.Parse(parts[2]);
+						
+						// Indices
+						if (!String.IsNullOrEmpty(parts[3])) {
+							group.Indices = parts[3].Split(',').Select(s => {
+								int idx;
+								if (Int32.TryParse(s.Trim(), out idx) && idx >= 0 && idx < 256)
+									return idx;
+								return -1;
+							}).Where(i => i >= 0).ToList();
+						}
+						
+						// Parameters
+						if (parts.Length >= 5 && !String.IsNullOrEmpty(parts[4])) {
+							string[] paramParts = parts[4].Split('|');
+							foreach (string paramPart in paramParts) {
+								if (paramPart.StartsWith("hsv:")) {
+									string[] hsvParams = paramPart.Substring(4).Split(',');
+									if (hsvParams.Length >= 9) {
+										group.Parameters.HueMin = Double.Parse(hsvParams[0].Replace(",", "."), CultureInfo.InvariantCulture);
+										group.Parameters.HueMax = Double.Parse(hsvParams[1].Replace(",", "."), CultureInfo.InvariantCulture);
+										group.Parameters.HueStep = Double.Parse(hsvParams[2].Replace(",", "."), CultureInfo.InvariantCulture);
+										group.Parameters.SaturationMin = Double.Parse(hsvParams[3].Replace(",", "."), CultureInfo.InvariantCulture);
+										group.Parameters.SaturationMax = Double.Parse(hsvParams[4].Replace(",", "."), CultureInfo.InvariantCulture);
+										group.Parameters.SaturationStep = Double.Parse(hsvParams[5].Replace(",", "."), CultureInfo.InvariantCulture);
+										group.Parameters.LightnessMin = Double.Parse(hsvParams[6].Replace(",", "."), CultureInfo.InvariantCulture);
+										group.Parameters.LightnessMax = Double.Parse(hsvParams[7].Replace(",", "."), CultureInfo.InvariantCulture);
+										group.Parameters.LightnessStep = Double.Parse(hsvParams[8].Replace(",", "."), CultureInfo.InvariantCulture);
+									}
+								}
+								else if (paramPart.StartsWith("colorize:")) {
+									string[] colorizeParams = paramPart.Substring(10).Split(',');
+									if (colorizeParams.Length >= 5) {
+										group.Parameters.ColorizeHueLight = Double.Parse(colorizeParams[0].Replace(",", "."), CultureInfo.InvariantCulture);
+										group.Parameters.ColorizeHueMedium = Double.Parse(colorizeParams[1].Replace(",", "."), CultureInfo.InvariantCulture);
+										group.Parameters.ColorizeHueDark = Double.Parse(colorizeParams[2].Replace(",", "."), CultureInfo.InvariantCulture);
+										group.Parameters.ColorizeSaturation = Double.Parse(colorizeParams[3].Replace(",", "."), CultureInfo.InvariantCulture);
+										group.Parameters.ColorizeBrightness = Double.Parse(colorizeParams[4].Replace(",", "."), CultureInfo.InvariantCulture);
+									}
+								}
+								else if (paramPart.StartsWith("grayscale:")) {
+									string[] grayscaleParams = paramPart.Substring(10).Split(',');
+									if (grayscaleParams.Length >= 6) {
+										group.Parameters.GrayscaleType = (PaletteGeneratorEngine.GrayscaleType)Int32.Parse(grayscaleParams[0]);
+										group.Parameters.GrayscaleLightTone = Double.Parse(grayscaleParams[1].Replace(",", "."), CultureInfo.InvariantCulture);
+										group.Parameters.GrayscaleMediumTone = Double.Parse(grayscaleParams[2].Replace(",", "."), CultureInfo.InvariantCulture);
+										group.Parameters.GrayscaleDarkTone = Double.Parse(grayscaleParams[3].Replace(",", "."), CultureInfo.InvariantCulture);
+										group.Parameters.GrayscaleContrast = Double.Parse(grayscaleParams[4].Replace(",", "."), CultureInfo.InvariantCulture);
+										group.Parameters.GrayscaleBrightness = Double.Parse(grayscaleParams[5].Replace(",", "."), CultureInfo.InvariantCulture);
+									}
+								}
+							}
+						}
+
+						if (group.IsValid()) {
+							groups.Add(group);
+						}
+					}
+					catch {
+						// Skip invalid groups
+						continue;
+					}
+				}
+			}
+			catch {
+				// Return empty list on error
+			}
+
+			return groups;
 		}
 	}
 }
