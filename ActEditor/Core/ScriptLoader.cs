@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.CodeDom.Compiler;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -33,7 +33,7 @@ namespace ActEditor.Core {
 	public class ScriptLoader : IDisposable {
 		public const string OutputPath = "Scripts";
 		public const string OverrideIndex = "__IndexOverride";
-		internal static string[] ScriptNames = { "script_sample", "script0_magnify", "script1_replace_color", "script1_replace_color_all", "script2_expand", "script4_generate_single_sprite", "script5_remove_unused_sprites", "script6_merge_layers", "script7_add_effect1", "script8_add_frames", "script9_chibi_grf", "script10_trim_images", "script11_palette_sheet" };
+		internal static string[] ScriptNames = { "script_sample", "script0_magnify", "script1_replace_color", "script1_replace_color_all", "script2_expand", "script4_generate_single_sprite", "script5_remove_unused_sprites", "script6_merge_layers", "script7_add_effect1", "script8_add_frames", "script9_chibi_grf", "script10_trim_images", "script11_palette_sheet", "script13_palette_generator" };
 		internal static string[] Libraries = {"GRF.dll", "Utilities.dll", "TokeiLibrary.dll", "ErrorManager.dll"};
 		private static ConfigAsker _librariesConfiguration;
 		private readonly FileSystemWatcher _fsw;
@@ -333,7 +333,8 @@ namespace ActEditor.Core {
 				foreach (string file in new string[] {resource + ".cs"}) {
 					string filePath = GrfPath.Combine(path, file);
 
-					if (!File.Exists(filePath)) {
+					// Always update script13_palette_generator.cs to ensure it has the latest version
+					if (!File.Exists(filePath) || resource == "script13_palette_generator") {
 						File.WriteAllBytes(filePath, ApplicationManager.GetResource(file));
 						modified = true;
 					}
